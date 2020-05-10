@@ -4,54 +4,108 @@
 import pandas as pd
 import os
 import json
+from datetime import timedelta
+
 
 class JsonParser():
-    def __init__(self, file_src):
-        self.file_src = file_src
-        self.data = self.getDataFrame(file_src)
-        
+    def __init__(self, files_src):
+        self.file_src = files_src  
+        self._data = pd.DataFrame()
+        self._grpData = pd.DataFrame()     
+    
+    # setter function
+    def set_all_Json(self):
+        all_Json = []
+        for file in os.listdir(self.file_src):
+            if file.endswith(".json") and file.startswith('message_'):
+                all_Json.append(file)
+        return all_Json
+
+    all_Json = property(set_all_Json, doc='Cesta k souborům které se budou analyzovat.')
 
     @property
-    def listOfjson(self):
-        filelist = []
-        for root, dirs, files in os.walk(self.file_src):
-            for i in files:
-                if i.endswith("json") and i.startswith('message'):
-                    filelist.append(i)
-        return filelist
+    def data(self):
+        if len(self._data) == 0:
+            self.__get_data__()
+        return self._data
 
-    def getDataFrame(self, file_src):
-        out = []
-
-        for y in self.listOfjson:
-            # Fileslist = názvy jsonu které jsou 
-            json_location = file_src +'\\' +y 
-            # creating the entire path 
-            # example: G:/jan-novak/message_1.json
-
-            with open(json_location) as soubor:
-                data = json.load(soubor)['messages']
-                # In json there are other things besides the news
-                #   see jsons themselves
-                for i in range(len(data)):
-                    # It is needed to go through all the data to set the correct encoding
-                    if not "content" in data[i]:
-                        continue
-                        # In addition to messages, the date list also includes pictures, stickers, etc.
-                        # There is no need to change encodings for the picture, etc.
-                    data[i]["content"] = data[i]["content"].encode('latin-1').decode('utf8')
-                    # content is messagess
-                    data[i]["sender_name"] = data[i]["sender_name"].encode('latin-1').decode('utf8')            
-            
-            out = out + data
-            #  merge data obtained from each list
-
-        items = pd.DataFrame().from_dict(out)
-        # conversion to the DataFrame data type
-
-        items['timestamp_ms'] = pd.to_datetime(items['timestamp_ms'],unit='ms')
-        # convert Unix time to "normal time"
-        return items
+    def __get_data__(self):
+        # start_time = time.time()
+        noparsetData = []
+        parsetData = []
+        for nameofjson in self.all_Json:
+            json_directory = '{}\\{}'.format(self.file_src, nameofjson)
+            with open(json_directory) as jsonFile:
+                noparsetData = json.load(jsonFile)['messages']
+                # print(noparsetData)
+            parsetData = parsetData + noparsetData
         
-zpravy = JsonParser('G:\source\messages\inbox\AntoninJarolim_BxELcrnTNQ')
-print(zpravy.data)
+        parsetData = pd.DataFrame().from_dict(parsetData)
+        parsetData['sender_name'] = parsetData['sender_name'].str.encode('latin-1').str.decode('utf-8')
+        parsetData['content'] = parsetData['content'].str.encode('latin-1').str.decode('utf-8')
+
+        parsetData['timestamp_ms'] = pd.to_datetime(parsetData['timestamp_ms'],unit='ms')
+
+        try:
+            parsetData['call_duration'] = parsetData['call_duration'].fillna(0)
+            parsetData['call_duration'] = pd.to_timedelta(parsetData['call_duration'], unit='s')
+        except:
+            pass
+        print(parsetData)
+
+        # 											
+
+        # parsetData = parsetData[['content','photos','type','reactions','share','videos','audio_files','gifs','sticker','files','call_duration','missed']].isnull().fillna('')
+        
+        # parsetData['call_duration'] = parsetData[parsetData['call_duration'] != 'Nan']
+        # elapsed_time = time.time() - start_time
+        # print(elapsed_time)
+        
+        self._data = parsetData
+
+    def toExcel(self,src):
+        self.data.to_excel(src, engine='xlsxwriter')  
+
+class CountFunction(JsonParser):
+    
+    @property
+    def countedByuser(self):
+        if len(self._grpData) == 0:
+            self.__calcgrpData__()
+        print(self.__grpData__)
+        return self.__grpData__
+
+    def __calcgrpData__(self,):
+        '''Vypočítá počet kolikrát jsou jednotlivé prvky použity'''
+        data = self.data.drop(['timestamp_ms','type'],axis=1)
+        print(data)
+        self.__grpData__ = data.groupby(by='sender_name',).agg('count')
+        if 'call_duration' in data:
+            self.__grpData__['call_duration'] = data[['call_duration','sender_name']].groupby(by='sender_name',).sum()
+
+
+    def get_countedByuser(self, column:str=None , user:str=None):
+            return self.countedByuser[column].loc(user)
+
+    def set_counted2gether(self):
+        data = self.countedByuser
+        return data.sum()
+
+    counted2gether = property(set_counted2gether, doc='')
+        
+
+
+    
+
+
+
+
+
+
+zpravy = CountFunction('G:\source\messages\inbox\SoudruzizInfotechu4_O75fRLbgdQ')
+print(zpravy.countedByuser)
+zpravy.countedByuser.to_excel('soudruzi.xlsx', engine='xlsxwriter')        
+
+
+zpravy = CountFunction('G:\source\messages\inbox\AntoninJarolim_BxELcrnTNQ')
+print(zpravy.counted2gether)
