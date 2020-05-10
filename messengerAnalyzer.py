@@ -102,10 +102,3 @@ class CountFunction(JsonParser):
 
 
 
-zpravy = CountFunction('G:\source\messages\inbox\SoudruzizInfotechu4_O75fRLbgdQ')
-print(zpravy.countedByuser)
-zpravy.countedByuser.to_excel('soudruzi.xlsx', engine='xlsxwriter')        
-
-
-zpravy = CountFunction('G:\source\messages\inbox\AntoninJarolim_BxELcrnTNQ')
-print(zpravy.counted2gether)
